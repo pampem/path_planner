@@ -1,0 +1,4 @@
+FCUのIMUと、LiDARのIMU情報を取ってきて、そこの差からLiDARの角度をDetect。
+Glimから得たPoseは傾いているので、それを上記のIMU情報を用いて角度補正したPose情報をPublishするノードをROS側で作る。
+
+もともと、Glim_apm_bridgeでPoseはGlimからAP(Mavros)にだだ流ししていたので、それを変えるだけ。

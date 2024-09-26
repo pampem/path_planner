@@ -1,0 +1,10 @@
+{
+    "files.associations": {
+        "*.msg": "cpp",
+        "chrono": "cpp",
+        "*.ipp": "cpp",
+        "deque": "cpp",
+        "string": "cpp",
+        "vector": "cpp"
+    }
+}
