@@ -25,7 +25,7 @@ public:
     takeoff_client = this->create_client<mavros_msgs::srv::CommandTOL>("/drone1/mavros/cmd/takeoff");
     land_client = this->create_client<mavros_msgs::srv::CommandTOL>("/drone1/mavros/cmd/land");
     pose_subscriber = this->create_subscription<geometry_msgs::msg::PoseStamped>(
-      "/drone1/mavros/local_position/pose", 10, std::bind(&PathPlannerNode::pose_callback, this, std::placeholders::_1));
+      "/drone1/mavros/vision_pose/pose", 10, std::bind(&PathPlannerNode::pose_callback, this, std::placeholders::_1));
 
     gridmap_subscriber = this->create_subscription<nav_msgs::msg::OccupancyGrid>(
       "gridmap", 10, std::bind(&PathPlannerNode::gridmap_callback, this, std::placeholders::_1));

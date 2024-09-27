@@ -11,6 +11,9 @@ find_package(sensor_msgs REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(tf2_ros REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
 
 # インクルードディレクトリの設定
 include_directories(
@@ -21,6 +24,7 @@ include_directories(
 
 # 実行可能ファイルの追加
 add_executable(path_planner_node src/path_planner_node.cpp)
+add_executable(corrected_pose_publisher src/corrected_pose_publisher.cpp)
 
 # 依存関係の設定
 ament_target_dependencies(path_planner_node
@@ -32,14 +36,28 @@ ament_target_dependencies(path_planner_node
   cv_bridge
 )
 
+ament_target_dependencies(corrected_pose_publisher
+  rclcpp
+  sensor_msgs
+  geometry_msgs
+  tf2
+  tf2_ros
+  tf2_geometry_msgs
+  message_filters
+)
+
 # ライブラリのリンク
 target_link_libraries(path_planner_node
   ${OpenCV_LIBRARIES}
   Eigen3::Eigen
 )
 
+target_link_libraries(corrected_pose_publisher
+  Eigen3::Eigen
+)
+
 # インストール設定
-install(TARGETS path_planner_node
+install(TARGETS path_planner_node corrected_pose_publisher
   DESTINATION lib/${PROJECT_NAME}
 )
 

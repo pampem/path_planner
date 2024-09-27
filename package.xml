@@ -18,6 +18,9 @@
   <build_depend>eigen3_cmake_module</build_depend>
   <build_depend>Eigen3</build_depend>
   <build_depend>opencv</build_depend>
+  <build_depend>tf2</build_depend>
+  <build_depend>tf2_ros</build_depend>
+  <build_depend>tf2_geometry_msgs</build_depend>
 
   <!-- 実行時の依存関係 -->
   <exec_depend>rclcpp</exec_depend>
@@ -29,6 +32,11 @@
   <exec_depend>eigen3_cmake_module</exec_depend>
   <exec_depend>Eigen3</exec_depend>
   <exec_depend>opencv</exec_depend>
+  <exec_depend>tf2</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>tf2_geometry_msgs</exec_depend>
+
+  <depend>message_filters</depend>
 
   <export>
     <build_type>ament_cmake</build_type>
