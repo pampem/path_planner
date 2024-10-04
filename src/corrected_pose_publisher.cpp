@@ -37,12 +37,12 @@ private:
 
     // Step 1: Create a quaternion for a +45 degrees pitch rotation (around Y axis)
     tf2::Quaternion q_pitch_correction;
-    double pitch_correction_radians = - 3 * M_PI / 4;  // 45 degrees in radians
+    double pitch_correction_radians = - 3 * M_PI / 4;  
     q_pitch_correction.setRPY(0.0, pitch_correction_radians, 0.0);  // Only pitch correction
 
     // Step 2: Create a quaternion for a 180 degrees yaw rotation (around Z axis)
     tf2::Quaternion q_yaw_rotation;
-    double yaw_rotation_radians = M_PI;  // 180 degrees in radians
+    double yaw_rotation_radians = 0; 
     q_yaw_rotation.setRPY(0.0, 0.0, yaw_rotation_radians);  // Only yaw rotation (around Z axis)
 
     // Apply the pitch correction first, then apply the 180 degrees yaw rotation
