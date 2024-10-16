@@ -21,6 +21,7 @@ private:
   void timerCallback();
 
   tf2::Quaternion computeAverageQuaternion(const std::vector<tf2::Quaternion>& quaternions);
+  tf2::Quaternion computeOrientationCorrection(const tf2::Quaternion& lidar_orientation, const tf2::Quaternion& fcu_orientation);
 
   rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr fcu_imu_sub_;
   rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr lidar_imu_sub_;
@@ -64,7 +65,7 @@ CorrectedPosePublisherIMU::CorrectedPosePublisherIMU()
 
   // FCU IMUサブスクリプション
   fcu_imu_sub_ = this->create_subscription<sensor_msgs::msg::Imu>(
-    "/drone1/mavros/imu/data", qos,
+    "/drone1/mavros/imu/data_raw", qos, //dataとdata_rawは座標系が違うらしい。rawはNED、dataはENU。
     std::bind(&CorrectedPosePublisherIMU::fcuImuCallback, this, std::placeholders::_1));
 
   // LiDAR IMUサブスクリプション
@@ -101,29 +102,37 @@ void CorrectedPosePublisherIMU::fcuImuCallback(const sensor_msgs::msg::Imu::Shar
     return;
   }
 
-  if (collecting_data_)
+    if (collecting_data_)
   {
     tf2::fromMsg(msg->orientation, last_fcu_orientation_);
     has_fcu_orientation_ = true;
 
+    // クォータニオンの符号を統一
+    if (last_fcu_orientation_.w() < 0)
+    {
+      last_fcu_orientation_ = tf2::Quaternion(
+        -last_fcu_orientation_.x(),
+        -last_fcu_orientation_.y(),
+        -last_fcu_orientation_.z(),
+        -last_fcu_orientation_.w());
+    }
+
     // デバッグ: FCU IMUのオリエンテーションを表示
-    RCLCPP_DEBUG(this->get_logger(), "FCU IMU orientation: x=%f, y=%f, z=%f, w=%f", last_fcu_orientation_.x(), last_fcu_orientation_.y(), last_fcu_orientation_.z(), last_fcu_orientation_.w());
+    RCLCPP_DEBUG(this->get_logger(), "FCU IMU orientation (normalized): x=%f, y=%f, z=%f, w=%f",
+                 last_fcu_orientation_.x(), last_fcu_orientation_.y(),
+                 last_fcu_orientation_.z(), last_fcu_orientation_.w());
 
     if (has_lidar_orientation_)
     {
-      tf2::Quaternion diff = last_fcu_orientation_ * last_lidar_orientation_.inverse();
-      diff.normalize(); // 正規化を追加
+      // 補正クォータニオンを計算
+      tf2::Quaternion correction = computeOrientationCorrection(last_lidar_orientation_, last_fcu_orientation_);
 
-      // 差分クォータニオンの検証
-      if (std::isnan(diff.x()) || std::isnan(diff.y()) || std::isnan(diff.z()) || std::isnan(diff.w()))
-      {
-        RCLCPP_WARN(this->get_logger(), "Difference quaternion contains NaN values. Ignoring.");
-      }
-      else
-      {
-        orientation_differences_.push_back(diff);
-        RCLCPP_DEBUG(this->get_logger(), "Stored orientation difference. Total samples: %zu", orientation_differences_.size());
-      }
+      // 補正クォータニオンをリストに追加
+      orientation_differences_.push_back(correction);
+
+      // デバッグ: 補正クォータニオンを表示
+      RCLCPP_DEBUG(this->get_logger(), "Correction quaternion: x=%f, y=%f, z=%f, w=%f",
+                   correction.x(), correction.y(), correction.z(), correction.w());
 
       has_fcu_orientation_ = false;
       has_lidar_orientation_ = false;
@@ -151,30 +160,24 @@ void CorrectedPosePublisherIMU::lidarImuCallback(const sensor_msgs::msg::Imu::Sh
   if (collecting_data_)
   {
     tf2::fromMsg(msg->orientation, last_lidar_orientation_);
+
+    // クォータニオンの符号を統一
+    if (last_lidar_orientation_.w() < 0)
+    {
+      last_lidar_orientation_ = tf2::Quaternion(
+        -last_lidar_orientation_.x(),
+        -last_lidar_orientation_.y(),
+        -last_lidar_orientation_.z(),
+        -last_lidar_orientation_.w());
+    }
+
     has_lidar_orientation_ = true;
 
     // デバッグ: LiDAR IMUのオリエンテーションを表示
-    RCLCPP_DEBUG(this->get_logger(), "LiDAR IMU orientation: x=%f, y=%f, z=%f, w=%f", last_lidar_orientation_.x(), last_lidar_orientation_.y(), last_lidar_orientation_.z(), last_lidar_orientation_.w());
+    RCLCPP_DEBUG(this->get_logger(), "LiDAR IMU orientation (normalized): x=%f, y=%f, z=%f, w=%f",
+                 last_lidar_orientation_.x(), last_lidar_orientation_.y(),
+                 last_lidar_orientation_.z(), last_lidar_orientation_.w());
 
-    if (has_fcu_orientation_)
-    {
-      tf2::Quaternion diff = last_fcu_orientation_ * last_lidar_orientation_.inverse();
-      diff.normalize(); // 正規化を追加
-
-      // 差分クォータニオンの検証
-      if (std::isnan(diff.x()) || std::isnan(diff.y()) || std::isnan(diff.z()) || std::isnan(diff.w()))
-      {
-        RCLCPP_WARN(this->get_logger(), "Difference quaternion contains NaN values. Ignoring.");
-      }
-      else
-      {
-        orientation_differences_.push_back(diff);
-        RCLCPP_DEBUG(this->get_logger(), "Stored orientation difference. Total samples: %zu", orientation_differences_.size());
-      }
-
-      has_fcu_orientation_ = false;
-      has_lidar_orientation_ = false;
-    }
   }
 }
 
@@ -189,10 +192,11 @@ void CorrectedPosePublisherIMU::poseCallback(const geometry_msgs::msg::PoseStamp
     tf2::fromMsg(msg->pose.orientation, pose_orientation);
 
     // デバッグ: オリジナルのオリエンテーションを表示
-    RCLCPP_DEBUG(this->get_logger(), "Original orientation: x=%f, y=%f, z=%f, w=%f", pose_orientation.x(), pose_orientation.y(), pose_orientation.z(), pose_orientation.w());
-    RCLCPP_DEBUG(this->get_logger(), "Orientation correction: x=%f, y=%f, z=%f, w=%f", orientation_correction_.x(), orientation_correction_.y(), orientation_correction_.z(), orientation_correction_.w());
+    RCLCPP_DEBUG(this->get_logger(), "Original orientation: x=%f, y=%f, z=%f, w=%f",
+                 pose_orientation.x(), pose_orientation.y(), pose_orientation.z(), pose_orientation.w());
+    RCLCPP_DEBUG(this->get_logger(), "Orientation correction: x=%f, y=%f, z=%f, w=%f",
+                 orientation_correction_.x(), orientation_correction_.y(), orientation_correction_.z(), orientation_correction_.w());
 
-    // 補正を適用
     tf2::Quaternion corrected_orientation = orientation_correction_ * pose_orientation;
     corrected_orientation.normalize();
 
@@ -230,7 +234,7 @@ void CorrectedPosePublisherIMU::timerCallback()
 
   if (collecting_data_)
   {
-    if (elapsed_time.seconds() >= 15.0)
+    if (elapsed_time.seconds() >= 5.0)
     {
       collecting_data_ = false;
 
@@ -239,7 +243,14 @@ void CorrectedPosePublisherIMU::timerCallback()
         orientation_correction_ = computeAverageQuaternion(orientation_differences_);
         orientation_correction_.normalize();
         RCLCPP_INFO(this->get_logger(), "Orientation correction calculated after collecting %zu samples.", orientation_differences_.size());
-        RCLCPP_INFO(this->get_logger(), "Orientation correction: x=%f, y=%f, z=%f, w=%f", orientation_correction_.x(), orientation_correction_.y(), orientation_correction_.z(), orientation_correction_.w());
+        RCLCPP_INFO(this->get_logger(), "Orientation correction: x=%f, y=%f, z=%f, w=%f",
+                    orientation_correction_.x(), orientation_correction_.y(), orientation_correction_.z(), orientation_correction_.w());
+
+        // オイラー角で補正クォータニオンを表示
+        double roll, pitch, yaw;
+        tf2::Matrix3x3(orientation_correction_).getRPY(roll, pitch, yaw);
+        RCLCPP_INFO(this->get_logger(), "Orientation correction in RPY (degrees): roll=%f, pitch=%f, yaw=%f",
+                    roll * 180.0 / M_PI, pitch * 180.0 / M_PI, yaw * 180.0 / M_PI);
       }
       else
       {
@@ -255,6 +266,68 @@ void CorrectedPosePublisherIMU::timerCallback()
   }
 }
 
+tf2::Quaternion CorrectedPosePublisherIMU::computeOrientationCorrection(const tf2::Quaternion& lidar_orientation, const tf2::Quaternion& fcu_orientation)
+{
+  // 機体の前方向を表す単位ベクトル（機体座標系のX軸）
+  tf2::Vector3 body_forward(1.0, 0.0, 0.0);
+
+  // LiDAR IMUでの前方向ベクトル（ワールド座標系）
+  tf2::Vector3 lidar_forward = tf2::quatRotate(lidar_orientation, body_forward);
+
+  // FCU IMUでの前方向ベクトル（ワールド座標系）
+  tf2::Vector3 fcu_forward = tf2::quatRotate(fcu_orientation, body_forward);
+
+  // ベクトルの正規化
+  lidar_forward.normalize();
+  fcu_forward.normalize();
+
+  // ドットプロダクトを計算
+  double dot_product = lidar_forward.dot(fcu_forward);
+
+  // 回転軸と角度を初期化
+  tf2::Vector3 rotation_axis;
+  double angle;
+
+  if (std::abs(dot_product + 1.0) < 1e-6)
+  {
+    // ベクトルが正反対の場合（180度回転）
+    // 任意の直交ベクトルを回転軸として選択
+    rotation_axis = lidar_forward.cross(tf2::Vector3(1.0, 0.0, 0.0));
+    if (rotation_axis.length() < 1e-6)
+    {
+      rotation_axis = lidar_forward.cross(tf2::Vector3(0.0, 1.0, 0.0));
+    }
+    rotation_axis.normalize();
+    angle = M_PI;
+  }
+  else
+  {
+    // 通常の回転角と回転軸を計算
+    rotation_axis = lidar_forward.cross(fcu_forward);
+    angle = acos(dot_product);
+
+    // 回転軸の長さが小さい場合の処理
+    if (rotation_axis.length() < 1e-6)
+    {
+      // ベクトルがほぼ同じ方向を向いている場合、補正は不要
+      return tf2::Quaternion::getIdentity();
+    }
+
+    rotation_axis.normalize();
+  }
+
+  // 回転軸と角度から補正クォータニオンを計算
+  tf2::Quaternion correction_quaternion;
+  correction_quaternion.setRotation(rotation_axis, angle);
+  correction_quaternion.normalize();
+
+  // デバッグ: 回転軸と角度を表示
+  RCLCPP_DEBUG(this->get_logger(), "Rotation axis: x=%f, y=%f, z=%f, angle=%f degrees",
+               rotation_axis.x(), rotation_axis.y(), rotation_axis.z(), angle * 180.0 / M_PI);
+
+  return correction_quaternion;
+}
+
 tf2::Quaternion CorrectedPosePublisherIMU::computeAverageQuaternion(const std::vector<tf2::Quaternion>& quaternions)
 {
   if (quaternions.empty())
@@ -263,10 +336,20 @@ tf2::Quaternion CorrectedPosePublisherIMU::computeAverageQuaternion(const std::v
     return tf2::Quaternion::getIdentity();
   }
 
+  // クォータニオンのリストをコピーし、符号を統一
+  std::vector<tf2::Quaternion> quaternions_copy = quaternions;
+  for (auto& q : quaternions_copy)
+  {
+    if (q.w() < 0)
+    {
+      q = tf2::Quaternion(-q.x(), -q.y(), -q.z(), -q.w());
+    }
+  }
+
   // クォータニオンの平均を計算（固有値分解を使用）
   Eigen::MatrixXd A(4, 4);
   A.setZero();
-  for (const auto& q : quaternions)
+  for (const auto& q : quaternions_copy)
   {
     Eigen::Vector4d q_vec(q.x(), q.y(), q.z(), q.w());
     A += q_vec * q_vec.transpose();
@@ -285,7 +368,8 @@ tf2::Quaternion CorrectedPosePublisherIMU::computeAverageQuaternion(const std::v
   Eigen::MatrixXd eigenvectors = eigen_solver.eigenvectors();
 
   // デバッグ: 固有値を表示
-  RCLCPP_DEBUG(this->get_logger(), "Eigenvalues: %f, %f, %f, %f", eigenvalues(0), eigenvalues(1), eigenvalues(2), eigenvalues(3));
+  RCLCPP_DEBUG(this->get_logger(), "Eigenvalues: %f, %f, %f, %f",
+               eigenvalues(0), eigenvalues(1), eigenvalues(2), eigenvalues(3));
 
   Eigen::Vector4d avg_q_vec = eigenvectors.col(3); // 最大の固有値に対応する固有ベクトル
 
@@ -293,7 +377,8 @@ tf2::Quaternion CorrectedPosePublisherIMU::computeAverageQuaternion(const std::v
   avg_q.normalize();
 
   // デバッグ: 平均クォータニオンを表示
-  RCLCPP_DEBUG(this->get_logger(), "Average quaternion: x=%f, y=%f, z=%f, w=%f", avg_q.x(), avg_q.y(), avg_q.z(), avg_q.w());
+  RCLCPP_DEBUG(this->get_logger(), "Average quaternion: x=%f, y=%f, z=%f, w=%f",
+               avg_q.x(), avg_q.y(), avg_q.z(), avg_q.w());
 
   return avg_q;
 }
