@@ -25,6 +25,7 @@ include_directories(
 # 実行可能ファイルの追加
 add_executable(path_planner_node src/path_planner_node.cpp)
 add_executable(corrected_pose_publisher src/corrected_pose_publisher.cpp)
+add_executable(corrected_pose_publisher_imu src/corrected_pose_publisher_imu.cpp)
 
 # 依存関係の設定
 ament_target_dependencies(path_planner_node
@@ -46,6 +47,16 @@ ament_target_dependencies(corrected_pose_publisher
   message_filters
 )
 
+ament_target_dependencies(corrected_pose_publisher_imu
+  rclcpp
+  sensor_msgs
+  geometry_msgs
+  tf2
+  tf2_ros
+  tf2_geometry_msgs
+  message_filters
+)
+
 # ライブラリのリンク
 target_link_libraries(path_planner_node
   ${OpenCV_LIBRARIES}
@@ -57,8 +68,12 @@ target_link_libraries(corrected_pose_publisher
 )
 
 # インストール設定
-install(TARGETS path_planner_node corrected_pose_publisher
+install(TARGETS path_planner_node corrected_pose_publisher corrected_pose_publisher_imu
   DESTINATION lib/${PROJECT_NAME}
+)
+install(DIRECTORY
+  launch
+  DESTINATION share/${PROJECT_NAME}/
 )
 
 ament_package()
