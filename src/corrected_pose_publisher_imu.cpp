@@ -139,10 +139,10 @@ void CorrectedPosePublisherIMU::imuCallbackLiDAR(const sensor_msgs::msg::Imu::Sh
 
       calibration_done_ = true;
       double roll, pitch, yaw;
-tf2::Quaternion lidar_quaternion;
-lidar_quaternion.setRPY(avg_accel_lidar.x(), avg_accel_lidar.y(), avg_accel_lidar.z());
-tf2::Matrix3x3(lidar_quaternion).getRPY(roll, pitch, yaw);
-RCLCPP_INFO(this->get_logger(), "Calibration completed. Correction quaternion computed. LiDAR average angles: roll=%.2f, pitch=%.2f, yaw=%.2f", roll * 180.0 / M_PI, pitch * 180.0 / M_PI, yaw * 180.0 / M_PI);
+      tf2::Quaternion lidar_quaternion;
+      lidar_quaternion.setRPY(avg_accel_lidar.x(), avg_accel_lidar.y(), avg_accel_lidar.z());
+      tf2::Matrix3x3(lidar_quaternion).getRPY(roll, pitch, yaw);
+      RCLCPP_INFO(this->get_logger(), "Calibration completed. Correction quaternion computed. LiDAR average angles: roll=%.2f, pitch=%.2f, yaw=%.2f", roll * 180.0 / M_PI, pitch * 180.0 / M_PI, yaw * 180.0 / M_PI);
     }
   }
 }
@@ -213,8 +213,8 @@ void CorrectedPosePublisherIMU::poseCallback(const geometry_msgs::msg::PoseStamp
   mocap_pose_pub_->publish(corrected_pose);
 
   double roll, pitch, yaw;
-tf2::Matrix3x3(q_enu).getRPY(roll, pitch, yaw);
-RCLCPP_INFO(this->get_logger(), "Published corrected pose with IMU-based correction and ENU alignment. Euler angles: roll=%.2f, pitch=%.2f, yaw=%.2f", roll * 180.0 / M_PI, pitch * 180.0 / M_PI, yaw * 180.0 / M_PI);
+  tf2::Matrix3x3(q_enu).getRPY(roll, pitch, yaw);
+  RCLCPP_INFO(this->get_logger(), "Published corrected pose with IMU-based correction and ENU alignment. Euler angles: roll=%.2f, pitch=%.2f, yaw=%.2f", roll * 180.0 / M_PI, pitch * 180.0 / M_PI, yaw * 180.0 / M_PI);
 }
 
 int main(int argc, char * argv[])
