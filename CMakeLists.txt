@@ -72,12 +72,10 @@ add_library(path_planner SHARED src/path_planner.cpp)
 ament_target_dependencies(path_planner
   rclcpp
   rclcpp_components
-  sensor_msgs
-  std_msgs
+  geometry_msgs
+  nav_msgs
   tf2
   tf2_ros
-  cv_bridge
-  pcl_conversions
 )
 
 target_include_directories(

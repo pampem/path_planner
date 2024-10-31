@@ -5,14 +5,17 @@
 #ifndef PATH_PLANNER__PATH_PLANNER_HPP_
 #define PATH_PLANNER__PATH_PLANNER_HPP_
 
-#include "rclcpp/rclcpp.hpp"
-
 #include <Eigen/Dense>
+#include <rclcpp/rclcpp.hpp>
 
-#include "geometry_msgs/msg/pose_stamped.hpp"
-#include "geometry_msgs/msg/twist.hpp"
+#include <geometry_msgs/msg/pose_stamped.hpp>
+#include <geometry_msgs/msg/twist.hpp>
+#include <nav_msgs/msg/occupancy_grid.hpp>
 
-#include <vector>
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
+
+#include <memory>
 
 namespace path_planner
 {
@@ -20,28 +23,25 @@ namespace path_planner
 class PathPlanner : public rclcpp::Node
 {
 public:
-  // コンストラクタ
   explicit PathPlanner(const rclcpp::NodeOptions & options);
 
 private:
-  void pose_callback(geometry_msgs::msg::PoseStamped::SharedPtr msg);
-
-  rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr lidar_subscription_;
-  rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr pose_subscription_;
-
-  rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr velocity_publisher_;
+  /**
+   * @brief glimなどのSLAMからPoseを受け取るコールバック。
+   * @param msg 自己位置姿勢推定結果。
+   */
+  void slam_pose_callback(geometry_msgs::msg::PoseStamped::SharedPtr msg);
+  void gridmap_callback(nav_msgs::msg::OccupancyGrid::SharedPtr msg);
 
   geometry_msgs::msg::PoseStamped current_pose_;
-  rclcpp::TimerBase::SharedPtr timer_;
-
-  sensor_msgs::msg::PointCloud2::SharedPtr latest_lidar_msg_;
 
   Eigen::Vector2d target_position_;
 
   void calculate_path();
-  void send_velocity_command(const geometry_msgs::msg::Twist & cmd_vel);
-  std::vector<Eigen::Vector2d> interpolate_spline(
-    const std::vector<pcl::PointXYZ> & points, int samples_per_segment);
+  tf2_ros::Buffer tf_buffer_;
+  std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
+  rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr slam_pose_subscription_;
+  rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr robot_velocity_publisher_;
 };
 
 }  // namespace path_planner
