@@ -27,18 +27,8 @@ include_directories(
   ${EIGEN3_INCLUDE_DIRS}
 )
 
-add_executable(path_planner_node src/path_planner_node.cpp)
 add_executable(corrected_pose_publisher src/corrected_pose_publisher.cpp)
 add_executable(corrected_pose_publisher_imu src/corrected_pose_publisher_imu.cpp)
-
-ament_target_dependencies(path_planner_node
-  rclcpp
-  mavros_msgs
-  geometry_msgs
-  nav_msgs
-  sensor_msgs
-  cv_bridge
-)
 
 ament_target_dependencies(corrected_pose_publisher
   rclcpp
@@ -60,16 +50,16 @@ ament_target_dependencies(corrected_pose_publisher_imu
   message_filters
 )
 
-target_link_libraries(path_planner_node
-  ${OpenCV_LIBRARIES}
-  Eigen3::Eigen
-)
+# target_link_libraries(path_planner_node
+#   ${OpenCV_LIBRARIES}
+#   Eigen3::Eigen
+# )
 
 target_link_libraries(corrected_pose_publisher
   Eigen3::Eigen
 )
 
-install(TARGETS path_planner_node corrected_pose_publisher corrected_pose_publisher_imu
+install(TARGETS corrected_pose_publisher corrected_pose_publisher_imu
   DESTINATION lib/${PROJECT_NAME}
 )
 install(DIRECTORY
@@ -77,9 +67,9 @@ install(DIRECTORY
   DESTINATION share/${PROJECT_NAME}/
 )
 
-add_library(new_path_planner SHARED src/new_path_planner.cpp)
+add_library(path_planner SHARED src/path_planner.cpp)
 
-ament_target_dependencies(new_path_planner
+ament_target_dependencies(path_planner
   rclcpp
   rclcpp_components
   sensor_msgs
@@ -89,21 +79,21 @@ ament_target_dependencies(new_path_planner
   cv_bridge
   pcl_conversions
 )
+
 target_include_directories(
-  new_path_planner PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+  path_planner PUBLIC "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
   "$<INSTALL_INTERFACE:include/${PROJECT_NAME}>")
 
 rclcpp_components_register_node(
-  new_path_planner PLUGIN "path_planner::NewPathPlanner"
-  EXECUTABLE new_path_planner_node)
+  path_planner PLUGIN "path_planner::PathPlanner"
+  EXECUTABLE path_planner_node)
 
 install(
-  TARGETS new_path_planner
+  TARGETS path_planner
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin)
 
-# Enable testing
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   ament_lint_auto_find_test_dependencies()
