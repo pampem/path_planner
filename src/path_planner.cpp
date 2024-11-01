@@ -15,9 +15,13 @@ PathPlanner::PathPlanner(const rclcpp::NodeOptions & options)
 {
   this->declare_parameter("attractive_force.max_distance", 3.0F);
   this->declare_parameter("attractive_force.gain", 0.5F);
+  this->declare_parameter("repulsive_force.min_distance", 2.0F);
+  this->declare_parameter("repulsive_force.gain", 1.0F);
 
   this->get_parameter("attractive_force.max_distance", attractive_force_max_distance_);
   this->get_parameter("attractive_force.gain", attractive_force_gain_);
+  this->get_parameter("repulsive_force.min_distance", repulsive_force_min_distance_);
+  this->get_parameter("repulsive_force.gain", repulsive_force_gain_);
 
   slam_pose_subscription_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(
     "glim_ros/pose", 10, std::bind(&PathPlanner::slam_pose_callback, this, std::placeholders::_1));
@@ -31,7 +35,7 @@ PathPlanner::PathPlanner(const rclcpp::NodeOptions & options)
   RCLCPP_INFO(this->get_logger(), "PathPlanner node has been initialized.");
 
   // 仮に置いてある。
-  target_position_.x() = 5;
+  target_position_.x() = -5;
   target_position_.y() = 10;
 }
 
@@ -40,7 +44,32 @@ void PathPlanner::gridmap_callback(nav_msgs::msg::OccupancyGrid::SharedPtr msg)
 {
   RCLCPP_DEBUG(this->get_logger(), "Received gridmap data.");
 
-  // process the gridmap here for path planning
+  int width = msg->info.width;
+  int height = msg->info.height;
+  float resolution = msg->info.resolution;
+
+  // TODO(izumita): : 毎回Resizeするのは重いので、Flagを設けてそれがある場合にResizeするようにする。
+  // Service通信かなんかで、create_gridmapからGridmapのResizeがあったことを認識する。
+  // 現状はResizeはないので、一度Resizeを実行するだけで問題ない。
+  repulsive_forces_.resize(width, height);
+
+  // グリッドマップをスキャンして障害物の位置を行列に保存
+  for (int y = 0; y < height; ++y) {
+    for (int x = 0; x < width; ++x) {
+      int index = y * width + x;
+      int8_t cell_value = msg->data[index];
+
+      // 障害物があるセルにのみ反発力ベクトルを割り当てる
+      // 障害物があるセルからロボットに向かう力が生成される。
+      if (cell_value > 0) {
+        float cell_x = msg->info.origin.position.x + x * resolution;
+        float cell_y = msg->info.origin.position.y + y * resolution;
+        repulsive_forces_(x, y) = Eigen::Vector2f(cell_x, cell_y);
+      } else {
+        repulsive_forces_(x, y) = Eigen::Vector2f(0.0F, 0.0F);
+      }
+    }
+  }
 }
 
 // SLAMのPoseコールバック
@@ -55,10 +84,13 @@ void PathPlanner::slam_pose_callback(geometry_msgs::msg::PoseStamped::SharedPtr 
   Eigen::Vector2f attractive_force = calculate_attractive_force(
     current_position, target_position_, attractive_force_gain_, attractive_force_max_distance_);
 
-  // 計算された引力をTwistメッセージに変換して移動指令を生成
+  Eigen::Vector2f repulsive_force = calculate_repulsive_force(current_position);
+
+  Eigen::Vector2f total_force = attractive_force + repulsive_force;
+
   geometry_msgs::msg::Twist twist_msg;
-  twist_msg.linear.x = attractive_force.x();
-  twist_msg.linear.y = attractive_force.y();
+  twist_msg.linear.x = total_force.x();
+  twist_msg.linear.y = total_force.y();
 
   // 速度指令をパブリッシュしてドローンに渡す
   robot_velocity_publisher_->publish(twist_msg);
@@ -105,6 +137,29 @@ Eigen::Vector2f PathPlanner::calculate_attractive_force(
   Eigen::Vector2f attractive_force = attractive_gain * direction.normalized() * distance;
 
   return attractive_force;
+}
+
+Eigen::Vector2f PathPlanner::calculate_repulsive_force(const Eigen::Vector2f & current_position)
+{
+  Eigen::Vector2f total_repulsive_force(0.0F, 0.0F);
+
+  for (int i = 0; i < repulsive_forces_.rows(); ++i) {
+    for (int j = 0; j < repulsive_forces_.cols(); ++j) {
+      Eigen::Vector2f cell_position = repulsive_forces_(i, j);
+      Eigen::Vector2f direction = current_position - cell_position;
+      float distance = direction.norm();
+
+      // 反発力の影響範囲内にある場合のみ計算
+      if (distance < repulsive_force_min_distance_) {
+        float repulsive_magnitude = repulsive_force_gain_ *
+                                    (1.0F / distance - 1.0F / repulsive_force_min_distance_) /
+                                    (distance * distance);
+        total_repulsive_force += direction.normalized() * repulsive_magnitude;
+      }
+    }
+  }
+
+  return total_repulsive_force;
 }
 
 }  // namespace path_planner

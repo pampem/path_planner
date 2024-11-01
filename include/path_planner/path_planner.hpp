@@ -40,6 +40,8 @@ private:
     const Eigen::Vector2f & current_position, const Eigen::Vector2f & goal_position,
     float attractive_gain, float attractive_force_max_distance);
 
+  Eigen::Vector2f calculate_repulsive_force(const Eigen::Vector2f & current_position);
+
   geometry_msgs::msg::PoseStamped current_pose_;
   Eigen::Vector2f target_position_;
   Eigen::Vector2f goal_position_;
@@ -51,6 +53,9 @@ private:
 
   float attractive_force_max_distance_;
   float attractive_force_gain_;
+  float repulsive_force_gain_;
+  float repulsive_force_min_distance_;
+  Eigen::Matrix<Eigen::Vector2f, Eigen::Dynamic, Eigen::Dynamic> repulsive_forces_;
 };
 
 }  // namespace path_planner
