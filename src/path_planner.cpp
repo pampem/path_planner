@@ -34,6 +34,9 @@ PathPlanner::PathPlanner(const rclcpp::NodeOptions & options)
   robot_velocity_publisher_ = this->create_publisher<geometry_msgs::msg::Twist>(
     "drone1/mavros/setpoint_velocity/cmd_vel_unstamped", 10);
 
+  current_robot_position_publisher_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>(
+    "current_robot_position_gridmap", 10);
+
   RCLCPP_INFO(this->get_logger(), "PathPlanner node has been initialized.");
 
   // 仮に置いてある。
@@ -155,13 +158,13 @@ Eigen::Vector2f PathPlanner::calculate_repulsive_force(const Eigen::Vector2f & c
       float distance = direction.norm();
 
       // 反発力の影響範囲内にある場合のみ計算
-      if (distance < repulsive_force_min_distance_) {
+      // つまり、近い距離にある障害物のみから反発力を計算するということ。
+      if (distance < repulsive_force_min_distance_ && distance > 0.0F) {
         float repulsive_magnitude = repulsive_force_gain_ *
                                     (1.0F / distance - 1.0F / repulsive_force_min_distance_) /
                                     (distance * distance);
         Eigen::Vector2f repulsive_force = direction.normalized() * repulsive_magnitude;
         total_repulsive_force += repulsive_force;
-
         RCLCPP_DEBUG(
           this->get_logger(),
           "Repulsive force for cell (%d, %d): [x: %f, y: %f], magnitude: %f, distance: %f", i, j,
