@@ -50,11 +50,6 @@ ament_target_dependencies(corrected_pose_publisher_imu
   message_filters
 )
 
-# target_link_libraries(path_planner_node
-#   ${OpenCV_LIBRARIES}
-#   Eigen3::Eigen
-# )
-
 target_link_libraries(corrected_pose_publisher
   Eigen3::Eigen
 )
@@ -67,17 +62,15 @@ install(DIRECTORY
   DESTINATION share/${PROJECT_NAME}/
 )
 
-add_library(path_planner SHARED src/path_planner.cpp)
+add_library(path_planner SHARED src/path_planner.cpp src/rotational_force.cpp)
 
 ament_target_dependencies(path_planner
   rclcpp
   rclcpp_components
-  sensor_msgs
-  std_msgs
+  geometry_msgs
+  nav_msgs
   tf2
   tf2_ros
-  cv_bridge
-  pcl_conversions
 )
 
 target_include_directories(
