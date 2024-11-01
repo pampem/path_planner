@@ -11,6 +11,7 @@
 
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/twist.hpp>
+#include <nav_msgs/msg/detail/occupancy_grid__struct.hpp>
 #include <nav_msgs/msg/occupancy_grid.hpp>
 
 #include <tf2_ros/buffer.h>
@@ -44,6 +45,9 @@ private:
   Eigen::Vector2f goal_position_;
   Eigen::Vector2f current_position_;
 
+  nav_msgs::msg::OccupancyGrid current_gridmap_;
+  Eigen::Matrix<Eigen::Vector2f, Eigen::Dynamic, Eigen::Dynamic> repulsive_forces_;
+
   tf2_ros::Buffer tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr slam_pose_subscription_;
@@ -55,7 +59,6 @@ private:
   float attractive_force_gain_;
   float repulsive_force_gain_;
   float repulsive_force_min_distance_;
-  Eigen::Matrix<Eigen::Vector2f, Eigen::Dynamic, Eigen::Dynamic> repulsive_forces_;
 };
 
 }  // namespace path_planner

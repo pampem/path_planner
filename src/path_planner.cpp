@@ -44,61 +44,14 @@ PathPlanner::PathPlanner(const rclcpp::NodeOptions & options)
   target_position_.y() = 10;
 }
 
-// GridMapのコールバック
+// GridMap Callback
 void PathPlanner::gridmap_callback(nav_msgs::msg::OccupancyGrid::SharedPtr msg)
 {
   RCLCPP_DEBUG(this->get_logger(), "Received gridmap data.");
-
-  int width = msg->info.width;
-  int height = msg->info.height;
-  float resolution = msg->info.resolution;
-
-  if (repulsive_forces_.rows() != width || repulsive_forces_.cols() != height) {
-    repulsive_forces_.resize(width, height);
-  }
-
-  // グリッドマップをスキャンして障害物の位置を行列に保存
-  for (int y = 0; y < height; ++y) {
-    for (int x = 0; x < width; ++x) {
-      int index = y * width + x;
-      int8_t cell_value = msg->data[index];
-
-      // 障害物があるセルにのみ反発力ベクトルを割り当てる
-      // 障害物があるセルからロボットに向かう力が生成される。
-      if (cell_value > 0) {
-        float cell_x = msg->info.origin.position.x + x * resolution;
-        float cell_y = msg->info.origin.position.y + y * resolution;
-        repulsive_forces_(x, y) = Eigen::Vector2f(cell_x, cell_y);
-      } else {
-        repulsive_forces_(x, y) = Eigen::Vector2f(0.0F, 0.0F);
-      }
-    }
-  }
-
-  // (For Debugging) 現在のロボット位置を示す OccupancyGrid メッセージを生成
-  auto robot_position_gridmap = std::make_shared<nav_msgs::msg::OccupancyGrid>();
-  robot_position_gridmap->header.stamp = this->now();
-  robot_position_gridmap->header.frame_id = "odom";
-  robot_position_gridmap->info = msg->info;
-  robot_position_gridmap->data.resize(width * height, 0);
-
-  // 現在のロボット位置をワールド座標系で取得して、セルに値を設定
-  float world_origin_x = msg->info.origin.position.x;
-  float world_origin_y = msg->info.origin.position.y;
-
-  // ロボットの位置をワールド座標系に基づいて OccupancyGrid のセル位置に変換
-  int robot_x = static_cast<int>((current_position_.x() - world_origin_x) / resolution);
-  int robot_y = static_cast<int>((current_position_.y() - world_origin_y) / resolution);
-
-  if (robot_x >= 0 && robot_x < width && robot_y >= 0 && robot_y < height) {
-    int robot_index = robot_y * width + robot_x;
-    robot_position_gridmap->data[robot_index] = 100;  // ロボット位置を示すための値
-  }
-
-  current_robot_position_publisher_->publish(*robot_position_gridmap);
+  current_gridmap_ = *msg;
 }
 
-// SLAMのPoseコールバック
+// SLAM Pose Callback
 void PathPlanner::slam_pose_callback(geometry_msgs::msg::PoseStamped::SharedPtr msg)
 {
   geometry_msgs::msg::PoseStamped current_pose = *msg;
@@ -148,13 +101,43 @@ Eigen::Vector2f PathPlanner::calculate_attractive_force(
 
 Eigen::Vector2f PathPlanner::calculate_repulsive_force(const Eigen::Vector2f & current_position)
 {
+  int width = current_gridmap_.info.width;
+  int height = current_gridmap_.info.height;
+  float resolution = current_gridmap_.info.resolution;
+
+  if (repulsive_forces_.rows() != width || repulsive_forces_.cols() != height) {
+    repulsive_forces_.resize(width, height);
+  }
+
+  // グリッドマップをスキャンして障害物の位置を行列に保存
+  for (int y = 0; y < height; ++y) {
+    for (int x = 0; x < width; ++x) {
+      int index = y * width + x;
+      int8_t cell_value = current_gridmap_.data[index];
+
+      // 障害物があるセルにのみ反発力ベクトルを割り当てる
+      // 障害物があるセルからロボットに向かう力が生成される。
+      if (cell_value > 0) {
+        float cell_x = current_gridmap_.info.origin.position.x + x * resolution;
+        float cell_y = current_gridmap_.info.origin.position.y + y * resolution;
+        repulsive_forces_(x, y) = Eigen::Vector2f(cell_x, cell_y);
+      } else {
+        repulsive_forces_(x, y) = Eigen::Vector2f(0.0F, 0.0F);
+      }
+    }
+  }
+
   Eigen::Vector2f total_repulsive_force(0.0F, 0.0F);
 
   for (int i = 0; i < repulsive_forces_.rows(); ++i) {
     for (int j = 0; j < repulsive_forces_.cols(); ++j) {
       Eigen::Vector2f cell_position = repulsive_forces_(i, j);
+      // ここだなあ。current_positionとcell_positionの座標系一致が求められている
       Eigen::Vector2f direction = current_position - cell_position;
       float distance = direction.norm();
+      if (distance < std::numeric_limits<float>::epsilon()) {
+        continue;  // 極端に小さい距離の場合、計算をスキップ
+      }
 
       // 反発力の影響範囲内にある場合のみ計算
       // つまり、近い距離にある障害物のみから反発力を計算するということ。
@@ -171,6 +154,29 @@ Eigen::Vector2f PathPlanner::calculate_repulsive_force(const Eigen::Vector2f & c
       }
     }
   }
+
+  // (For Debugging) 現在のロボット位置を示す OccupancyGrid メッセージを生成
+  auto robot_position_gridmap = std::make_shared<nav_msgs::msg::OccupancyGrid>();
+  robot_position_gridmap->header.stamp = this->now();
+  robot_position_gridmap->header.frame_id = "odom";
+  robot_position_gridmap->info = current_gridmap_.info;
+  robot_position_gridmap->data.resize(width * height, 0);
+
+  // 現在のロボット位置をワールド座標系で取得して、セルに値を設定
+  float world_origin_x = current_gridmap_.info.origin.position.x;
+  float world_origin_y = current_gridmap_.info.origin.position.y;
+
+  // ロボットの位置をワールド座標系に基づいて OccupancyGrid のセル位置に変換
+  // この式は他で使われているものと一緒???要確認
+  int robot_x = static_cast<int>((current_position_.x() - world_origin_x) / resolution);
+  int robot_y = static_cast<int>((current_position_.y() - world_origin_y) / resolution);
+
+  if (robot_x >= 0 && robot_x < width && robot_y >= 0 && robot_y < height) {
+    int robot_index = robot_y * width + robot_x;
+    robot_position_gridmap->data[robot_index] = 100;  // ロボット位置を示すための値
+  }
+
+  current_robot_position_publisher_->publish(*robot_position_gridmap);
 
   return total_repulsive_force;
 }
