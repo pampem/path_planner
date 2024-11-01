@@ -7,7 +7,7 @@
 #define ROTATIONAL_FORCE_HPP
 
 #include <Eigen/Dense>
-#include <nav_msgs/msg/detail/occupancy_grid__struct.hpp>
+#include <nav_msgs/msg/occupancy_grid.hpp>
 
 Eigen::Vector2f calculate_rotational_force(
   const Eigen::Vector2f & position, const Eigen::Vector2f & target,
