@@ -1,6 +1,7 @@
 /*
-  Copyright (c) 2024
-  Masashi Izumita
+  Copyright (c) 2024 Masashi Izumita
+
+  All rights reserved.
  */
 #ifndef PATH_PLANNER__PATH_PLANNER_HPP_
 #define PATH_PLANNER__PATH_PLANNER_HPP_
@@ -38,10 +39,16 @@ private:
   Eigen::Vector2d target_position_;
 
   void calculate_path();
+  Eigen::Vector2f calculate_attractive_force(
+    const Eigen::Vector2f & current_position, const Eigen::Vector2f & goal_position,
+    float attractive_gain, float attractive_force_max_distance);
   tf2_ros::Buffer tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr slam_pose_subscription_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr robot_velocity_publisher_;
+
+  float attractive_force_max_distance_;
+  float attractive_force_gain_;
 };
 
 }  // namespace path_planner
