@@ -9,7 +9,12 @@ Eigen::Vector2f calculate_rotational_force(
   const Eigen::Vector2f & position, const Eigen::Vector2f & target,
   const nav_msgs::msg::OccupancyGrid & gridmap)
 {
-  Eigen::Vector2f force;
-  // rotational forceの計算
+  // Validate occupancy grid
+  if (gridmap.data.empty()) {
+    throw std::invalid_argument("Occupancy grid is empty");
+  }
+
+  Eigen::Vector2f force = Eigen::Vector2f::Zero();
+  // TODO: Implement rotational force calculation
   return force;
 }
