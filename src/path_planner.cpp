@@ -14,7 +14,7 @@ PathPlanner::PathPlanner(const rclcpp::NodeOptions & options)
   tf_listener_(std::make_shared<tf2_ros::TransformListener>(tf_buffer_))
 {
   this->declare_parameter("attractive_force.max_distance", 3.0F);
-  this->declare_parameter("attractive_force.gain", 1.0F);
+  this->declare_parameter("attractive_force.gain", 0.5F);
 
   this->get_parameter("attractive_force.max_distance", attractive_force_max_distance_);
   this->get_parameter("attractive_force.gain", attractive_force_gain_);
@@ -25,11 +25,17 @@ PathPlanner::PathPlanner(const rclcpp::NodeOptions & options)
   auto gridmap_subscription = this->create_subscription<nav_msgs::msg::OccupancyGrid>(
     "gridmap", 10, std::bind(&PathPlanner::gridmap_callback, this, std::placeholders::_1));
 
-  robot_velocity_publisher_ = this->create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 10);
+  robot_velocity_publisher_ = this->create_publisher<geometry_msgs::msg::Twist>(
+    "drone1/mavros/setpoint_velocity/cmd_vel_unstamped", 10);
 
   RCLCPP_INFO(this->get_logger(), "PathPlanner node has been initialized.");
+
+  // 仮に置いてある。
+  target_position_.x() = 5;
+  target_position_.y() = 10;
 }
 
+// GridMapのコールバック
 void PathPlanner::gridmap_callback(nav_msgs::msg::OccupancyGrid::SharedPtr msg)
 {
   RCLCPP_DEBUG(this->get_logger(), "Received gridmap data.");
@@ -37,6 +43,32 @@ void PathPlanner::gridmap_callback(nav_msgs::msg::OccupancyGrid::SharedPtr msg)
   // process the gridmap here for path planning
 }
 
+// SLAMのPoseコールバック
+void PathPlanner::slam_pose_callback(geometry_msgs::msg::PoseStamped::SharedPtr msg)
+{
+  // 現在のポーズを更新
+  current_pose_ = *msg;
+
+  Eigen::Vector2f current_position(current_pose_.pose.position.x, current_pose_.pose.position.y);
+
+  // 引力を計算
+  Eigen::Vector2f attractive_force = calculate_attractive_force(
+    current_position, target_position_, attractive_force_gain_, attractive_force_max_distance_);
+
+  // 計算された引力をTwistメッセージに変換して移動指令を生成
+  geometry_msgs::msg::Twist twist_msg;
+  twist_msg.linear.x = attractive_force.x();
+  twist_msg.linear.y = attractive_force.y();
+
+  // 速度指令をパブリッシュしてドローンに渡す
+  robot_velocity_publisher_->publish(twist_msg);
+
+  RCLCPP_INFO(
+    this->get_logger(), "Published velocity command towards goal: [linear.x: %f, linear.y: %f]",
+    twist_msg.linear.x, twist_msg.linear.y);
+}
+
+// これいるかな
 void PathPlanner::calculate_path()
 {
   // Placeholder path calculation - add the real algorithm here

@@ -27,21 +27,23 @@ public:
   explicit PathPlanner(const rclcpp::NodeOptions & options);
 
 private:
+  void gridmap_callback(nav_msgs::msg::OccupancyGrid::SharedPtr msg);
   /**
    * @brief glimなどのSLAMからPoseを受け取るコールバック。
    * @param msg 自己位置姿勢推定結果。
    */
   void slam_pose_callback(geometry_msgs::msg::PoseStamped::SharedPtr msg);
-  void gridmap_callback(nav_msgs::msg::OccupancyGrid::SharedPtr msg);
-
-  geometry_msgs::msg::PoseStamped current_pose_;
-
-  Eigen::Vector2d target_position_;
 
   void calculate_path();
-  Eigen::Vector2f calculate_attractive_force(
+
+  static Eigen::Vector2f calculate_attractive_force(
     const Eigen::Vector2f & current_position, const Eigen::Vector2f & goal_position,
     float attractive_gain, float attractive_force_max_distance);
+
+  geometry_msgs::msg::PoseStamped current_pose_;
+  Eigen::Vector2f target_position_;
+  Eigen::Vector2f goal_position_;
+
   tf2_ros::Buffer tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr slam_pose_subscription_;
