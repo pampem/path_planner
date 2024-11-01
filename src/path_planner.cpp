@@ -53,7 +53,9 @@ void PathPlanner::gridmap_callback(nav_msgs::msg::OccupancyGrid::SharedPtr msg)
   // TODO(izumita): : 毎回Resizeするのは重いので、Flagを設けてそれがある場合にResizeするようにする。
   // Service通信かなんかで、create_gridmapからGridmapのResizeがあったことを認識する。
   // 現状はResizeはないので、一度Resizeを実行するだけで問題ない。
-  repulsive_forces_.resize(width, height);
+  if (repulsive_forces_.rows() != width || repulsive_forces_.cols() != height) {
+    repulsive_forces_.resize(width, height);
+  }
 
   // グリッドマップをスキャンして障害物の位置を行列に保存
   for (int y = 0; y < height; ++y) {
