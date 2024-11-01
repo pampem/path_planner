@@ -10,6 +10,7 @@
 #include <nav_msgs/msg/detail/occupancy_grid__struct.hpp>
 
 Eigen::Vector2f calculate_rotational_force(
-  const Eigen::Vector2f & position, const Eigen::Vector2f & target);
+  const Eigen::Vector2f & position, const Eigen::Vector2f & target,
+  const nav_msgs::msg::OccupancyGrid & gridmap);
 
 #endif  // ROTATIONAL_FORCE_HPP

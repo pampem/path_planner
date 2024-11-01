@@ -49,6 +49,7 @@ private:
   tf2_ros::Buffer tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr slam_pose_subscription_;
+  rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr gridmap_subscription_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr robot_velocity_publisher_;
 
   float attractive_force_max_distance_;

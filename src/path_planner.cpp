@@ -4,6 +4,7 @@
   All rights reserved.
  */
 #include "path_planner/path_planner.hpp"
+
 #include "path_planner/rotational_force.hpp"
 
 namespace path_planner
@@ -27,7 +28,7 @@ PathPlanner::PathPlanner(const rclcpp::NodeOptions & options)
   slam_pose_subscription_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(
     "glim_ros/pose", 10, std::bind(&PathPlanner::slam_pose_callback, this, std::placeholders::_1));
 
-  auto gridmap_subscription = this->create_subscription<nav_msgs::msg::OccupancyGrid>(
+  gridmap_subscription_ = this->create_subscription<nav_msgs::msg::OccupancyGrid>(
     "gridmap", 10, std::bind(&PathPlanner::gridmap_callback, this, std::placeholders::_1));
 
   robot_velocity_publisher_ = this->create_publisher<geometry_msgs::msg::Twist>(
@@ -81,7 +82,6 @@ void PathPlanner::slam_pose_callback(geometry_msgs::msg::PoseStamped::SharedPtr 
 
   Eigen::Vector2f current_position(current_pose_.pose.position.x, current_pose_.pose.position.y);
 
-  // 引力を計算
   Eigen::Vector2f attractive_force = calculate_attractive_force(
     current_position, target_position_, attractive_force_gain_, attractive_force_max_distance_);
 
@@ -93,12 +93,14 @@ void PathPlanner::slam_pose_callback(geometry_msgs::msg::PoseStamped::SharedPtr 
   twist_msg.linear.x = total_force.x();
   twist_msg.linear.y = total_force.y();
 
-  // 速度指令をパブリッシュしてドローンに渡す
   robot_velocity_publisher_->publish(twist_msg);
 
   RCLCPP_INFO(
-    this->get_logger(), "Published velocity command towards goal: [linear.x: %f, linear.y: %f]",
-    twist_msg.linear.x, twist_msg.linear.y);
+    this->get_logger(),
+    "Published velocity command towards goal: [linear.x: %f, linear.y: %f], "
+    "Attractive Force: [x: %f, y: %f], Repulsive Force: [x: %f, y: %f]",
+    twist_msg.linear.x, twist_msg.linear.y, attractive_force.x(), attractive_force.y(),
+    repulsive_force.x(), repulsive_force.y());
 }
 
 // これいるかな
@@ -155,7 +157,13 @@ Eigen::Vector2f PathPlanner::calculate_repulsive_force(const Eigen::Vector2f & c
         float repulsive_magnitude = repulsive_force_gain_ *
                                     (1.0F / distance - 1.0F / repulsive_force_min_distance_) /
                                     (distance * distance);
-        total_repulsive_force += direction.normalized() * repulsive_magnitude;
+        Eigen::Vector2f repulsive_force = direction.normalized() * repulsive_magnitude;
+        total_repulsive_force += repulsive_force;
+
+        RCLCPP_DEBUG(
+          this->get_logger(),
+          "Repulsive force for cell (%d, %d): [x: %f, y: %f], magnitude: %f, distance: %f", i, j,
+          repulsive_force.x(), repulsive_force.y(), repulsive_magnitude, distance);
       }
     }
   }
