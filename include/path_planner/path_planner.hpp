@@ -34,17 +34,15 @@ private:
    */
   void slam_pose_callback(geometry_msgs::msg::PoseStamped::SharedPtr msg);
 
-  void calculate_path();
-
   static Eigen::Vector2f calculate_attractive_force(
     const Eigen::Vector2f & current_position, const Eigen::Vector2f & goal_position,
     float attractive_gain, float attractive_force_max_distance);
 
   Eigen::Vector2f calculate_repulsive_force(const Eigen::Vector2f & current_position);
 
-  geometry_msgs::msg::PoseStamped current_pose_;
   Eigen::Vector2f target_position_;
   Eigen::Vector2f goal_position_;
+  Eigen::Vector2f current_position_;
 
   tf2_ros::Buffer tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;

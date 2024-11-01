@@ -34,8 +34,8 @@ PathPlanner::PathPlanner(const rclcpp::NodeOptions & options)
   robot_velocity_publisher_ = this->create_publisher<geometry_msgs::msg::Twist>(
     "drone1/mavros/setpoint_velocity/cmd_vel_unstamped", 10);
 
-  current_robot_position_publisher_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>(
-    "current_robot_position_gridmap", 10);
+  current_robot_position_publisher_ =
+    this->create_publisher<nav_msgs::msg::OccupancyGrid>("current_robot_position_gridmap", 10);
 
   RCLCPP_INFO(this->get_logger(), "PathPlanner node has been initialized.");
 
@@ -53,9 +53,6 @@ void PathPlanner::gridmap_callback(nav_msgs::msg::OccupancyGrid::SharedPtr msg)
   int height = msg->info.height;
   float resolution = msg->info.resolution;
 
-  // TODO(izumita): : 毎回Resizeするのは重いので、Flagを設けてそれがある場合にResizeするようにする。
-  // Service通信かなんかで、create_gridmapからGridmapのResizeがあったことを認識する。
-  // 現状はResizeはないので、一度Resizeを実行するだけで問題ない。
   if (repulsive_forces_.rows() != width || repulsive_forces_.cols() != height) {
     repulsive_forces_.resize(width, height);
   }
@@ -77,20 +74,41 @@ void PathPlanner::gridmap_callback(nav_msgs::msg::OccupancyGrid::SharedPtr msg)
       }
     }
   }
+
+  // (For Debugging) 現在のロボット位置を示す OccupancyGrid メッセージを生成
+  auto robot_position_gridmap = std::make_shared<nav_msgs::msg::OccupancyGrid>();
+  robot_position_gridmap->header.stamp = this->now();
+  robot_position_gridmap->header.frame_id = "odom";
+  robot_position_gridmap->info = msg->info;
+  robot_position_gridmap->data.resize(width * height, 0);
+
+  // 現在のロボット位置をワールド座標系で取得して、セルに値を設定
+  float world_origin_x = msg->info.origin.position.x;
+  float world_origin_y = msg->info.origin.position.y;
+
+  // ロボットの位置をワールド座標系に基づいて OccupancyGrid のセル位置に変換
+  int robot_x = static_cast<int>((current_position_.x() - world_origin_x) / resolution);
+  int robot_y = static_cast<int>((current_position_.y() - world_origin_y) / resolution);
+
+  if (robot_x >= 0 && robot_x < width && robot_y >= 0 && robot_y < height) {
+    int robot_index = robot_y * width + robot_x;
+    robot_position_gridmap->data[robot_index] = 100;  // ロボット位置を示すための値
+  }
+
+  current_robot_position_publisher_->publish(*robot_position_gridmap);
 }
 
 // SLAMのPoseコールバック
 void PathPlanner::slam_pose_callback(geometry_msgs::msg::PoseStamped::SharedPtr msg)
 {
-  // 現在のポーズを更新
-  current_pose_ = *msg;
+  geometry_msgs::msg::PoseStamped current_pose = *msg;
 
-  Eigen::Vector2f current_position(current_pose_.pose.position.x, current_pose_.pose.position.y);
+  current_position_(current_pose.pose.position.x, current_pose.pose.position.y);
 
   Eigen::Vector2f attractive_force = calculate_attractive_force(
-    current_position, target_position_, attractive_force_gain_, attractive_force_max_distance_);
+    current_position_, target_position_, attractive_force_gain_, attractive_force_max_distance_);
 
-  Eigen::Vector2f repulsive_force = calculate_repulsive_force(current_position);
+  Eigen::Vector2f repulsive_force = calculate_repulsive_force(current_position_);
 
   Eigen::Vector2f total_force = attractive_force + repulsive_force;
 
@@ -106,25 +124,6 @@ void PathPlanner::slam_pose_callback(geometry_msgs::msg::PoseStamped::SharedPtr 
     "Attractive Force: [x: %f, y: %f], Repulsive Force: [x: %f, y: %f]",
     twist_msg.linear.x, twist_msg.linear.y, attractive_force.x(), attractive_force.y(),
     repulsive_force.x(), repulsive_force.y());
-}
-
-// これいるかな
-void PathPlanner::calculate_path()
-{
-  // Placeholder path calculation - add the real algorithm here
-
-  // Example: Create a Twist message to move towards the target position
-  geometry_msgs::msg::Twist twist_msg;
-
-  twist_msg.linear.x = target_position_.x() - current_pose_.pose.position.x;
-  twist_msg.linear.y = target_position_.y() - current_pose_.pose.position.y;
-
-  // Publish the velocity command
-  robot_velocity_publisher_->publish(twist_msg);
-
-  RCLCPP_INFO(
-    this->get_logger(), "Published velocity command: [linear.x: %f, linear.y: %f]",
-    twist_msg.linear.x, twist_msg.linear.y);
 }
 
 // Goalに引かれる力を計算する関数。この力はそのCellにいるときだけ計算すればいいので、行列の形式で保存しておく必要はない。
