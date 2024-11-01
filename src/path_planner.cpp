@@ -4,6 +4,7 @@
   All rights reserved.
  */
 #include "path_planner/path_planner.hpp"
+#include "path_planner/rotational_force.hpp"
 
 namespace path_planner
 {
